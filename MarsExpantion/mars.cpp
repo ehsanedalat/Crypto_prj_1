@@ -29,7 +29,15 @@
  *   NO_TWEAK1, NO_TWEAK2 - eliminate the 1st, 2nd tweak to the key setup
  */
   
-#include "aes.h"
+#include "aes_new.h"
+#include <math.h>
+#include <limits.h>
+WORD plaintext[4]={0};
+WORD ciphertext[4]={0};
+WORD key[4]={0,0,0,0};
+WORD eee[4]={0};
+#define MULT 8
+#define EXP 2
 
 /* The low level mars routines are completely WORD oriented, and 
  * endian neutral. The high level NIST routines provide BYTE oriented
@@ -67,8 +75,8 @@
 #endif
 
 /* macros for left and right rotations */
-#define LROTATE(a,b) (((a)<<(int)(b&31)) | ((a)>>(W - (int)(b&31))))//zohre: age w ro 64 bit konim bayad inja ham b&63 benevisim 
-#define RROTATE(a,b) (((a)>>(int)(b&31)) | ((a)<<(W - (int)(b&31))))//zohre: age w ro 64 bit konim bayad inja ham b&63 benevisim 
+#define LROTATE(a,b) (((a)<<(int)(b&31)) | ((a)>>(W - (int)(b&31))))
+#define RROTATE(a,b) (((a)>>(int)(b&31)) | ((a)<<(W - (int)(b&31))))
 
 /* two 8 x 32 sboxes - stored together to save a pointer
  * these sboxes were generated with buf[3] = 0x02917d59, as
@@ -80,7 +88,7 @@
  *   test 3 eval 0.007813 (parity bias)
  *   test 4 eval 0.148438 (avalanche)
  */
-static WORD S[512] = {//inja az word estefade karde k age 64 bitish konim bayad s-box khodemoon ro bezarim 
+static WORD S[512] = {
   0x09d0c479, 0x28c8ffe0, 0x84aa6c39, 0x9dad7287, 
   0x7dff9be3, 0xd4268361, 0xc96da1d4, 0x7974cc93, 
   0x85d0582e, 0x2a4b5705, 0x1ca16a62, 0xc3bd279d, 
@@ -112,7 +120,7 @@ static WORD S[512] = {//inja az word estefade karde k age 64 bitish konim bayad 
   0x95e8eb8d, 0x6699486b, 0x901d7d9b, 0xfd6d6e31, 
   0x1090acef, 0xe0670dd8, 0xdab2e692, 0xcd6d4365, 
   0xe5393514, 0x3af345f0, 0x6241fc4d, 0x460da3a3, 
-  0x7bcf3729, 0x8bf1d1e0, 0x14aac070, 0x1587ed55, //***
+  0x7bcf3729, 0x8bf1d1e0, 0x14aac070, 0x1587ed55, 
   0x3afd7d3e, 0xd2f29e01, 0x29a9d1f6, 0xefb10c53, 
   0xcf3b870f, 0xb414935c, 0x664465ed, 0x024acac7, 
   0x59a744c1, 0x1d2936a7, 0xdc580aa6, 0xcf574ca8, 
@@ -144,7 +152,7 @@ static WORD S[512] = {//inja az word estefade karde k age 64 bitish konim bayad 
   0x8d421fc0, 0x9b0ed10c, 0x88f1a1e9, 0x54c1f029, 
   0x7dead57b, 0x8d7ba426, 0x4cf5178a, 0x551a7cca, 
   0x1a9a5f08, 0xfcd651b9, 0x25605182, 0xe11fc6c3, 
-  0xb6fd9676, 0x337b3027, 0xb7c8eb14, 0x9e5fd030, //****
+  0xb6fd9676, 0x337b3027, 0xb7c8eb14, 0x9e5fd030, 
   0x6b57e354, 0xad913cf7, 0x7e16688d, 0x58872a69, 
   0x2c2fc7df, 0xe389ccc6, 0x30738df1, 0x0824a734, 
   0xe1797a8b, 0xa4a8d57b, 0x5b5d193b, 0xc8a8309b, 
@@ -346,27 +354,28 @@ static WORD S_1[256]= {
   0x159cf22a, 0xc298d6e2, 0x2b78ef6a, 0x61a94ac0, 
   0xab561187, 0x14eea0f0, 0xdf0d4164, 0x19af70ee 
 };
+
 /*
  * The following implements Intermediate Values Tests Macros.
  * Since internal words are always kept little-endian, always
  * swap bytes before displaying.
  */
-//#ifdef IVT
-//int ivt_debug = 0;
-//FILE *ivt_fp;
-//int ivt_l = 0;
-//#define IVTSWAP(x) \
-//    ( (( x          ) << 24) | \
-//      (((x)&0xff00  ) << 8 ) | \
-//      (((x)&0xff0000) >> 8 ) | \
-//      (( x          ) >> 24)  )
-//#define IVT_DEBUG(a,b,c,d) \
-//    if (ivt_debug) \
-//        fprintf(ivt_fp,"IV%d=%8.8lx %8.8lx %8.8lx %8.8lx\n",ivt_l++,\
-//        IVTSWAP(a),IVTSWAP(b),IVTSWAP(c),IVTSWAP(d));
-//#else
+#ifdef IVT
+int ivt_debug = 0;
+FILE *ivt_fp;
+int ivt_l = 0;
+#define IVTSWAP(x) \
+    ( (( x          ) << 24) | \
+      (((x)&0xff00  ) << 8 ) | \
+      (((x)&0xff0000) >> 8 ) | \
+      (( x          ) >> 24)  )
+#define IVT_DEBUG(a,b,c,d) \
+    if (ivt_debug) \
+        fprintf(ivt_fp,"IV%d=%8.8lx %8.8lx %8.8lx %8.8lx\n",ivt_l++,\
+        IVTSWAP(a),IVTSWAP(b),IVTSWAP(c),IVTSWAP(d));
+#else
 #define IVT_DEBUG(a,b,c,d)
-//#endif
+#endif
                 
 /*************************************************************************
  *
@@ -377,10 +386,10 @@ static WORD S_1[256]= {
  ************************************************************************/
 
 /* if multiplication subkey k has 10 0's or 10 1's, mask in a fixing value */
-static WORD fix_subkey(WORD k, WORD r) //zohre inja hamash az word estefade karde mishe haminjoori 64 bit kard ya inke bayad mohasebatesho avaz konim?
+static WORD fix_subkey(WORD k, WORD r) 
 {
     /* the mask words come from S[265]..S[268], as chosen by index.c */
-    WORD *B = &S[265]; //zohre s-box ro copy karde to B faghat 256 taye avval ro copy karde too B
+    WORD *B = &S[265]; 
     WORD m1, m2;
     int i;
 
@@ -449,14 +458,14 @@ int mars_setup(int n, WORD *kp, WORD *ep)
 
     /* initialize constants at the beginning of the array */
     for (i=0; i<7; i++)
-        p[i-7] = S[i];//zohre az s-box estefade karde 
+        p[i-7] = S[i];
 
     /* Initial linear expansion to get 40 words */
     for (i=0,j=0; i<EKEY_WORDS-1; i++,j++) { 
-        WORD w = p[i-7] ^ p[i-2]; //zohre in mohasebat avaz nemishe ? 
+        WORD w = p[i-7] ^ p[i-2]; 
         if (j >= n) 
             j -= n;
-        p[i] = LROTATE(w,3) ^ kp[j] ^ i;//zohre in mohasebat avaz nemishe ? 
+        p[i] = LROTATE(w,3) ^ kp[j] ^ i;
     }
     /* set last word to length to prevent related keys */
     p[EKEY_WORDS-1] = (WORD)n;          
@@ -465,11 +474,11 @@ int mars_setup(int n, WORD *kp, WORD *ep)
     for (i=0;i<NUM_SETUP;i++){
         /* stir with full type-1 s-box rounds */
         for (j=1; j<EKEY_WORDS; j++) {
-            p[j] += S[ p[j-1]&511 ];//zohre az s-box estefade karde 
+            p[j] += S[ p[j-1]&511 ];
             p[j] = LROTATE(p[j],9);
         }
         /* wrap around end */
-        p[0] += S[ p[EKEY_WORDS-1]&511 ];//zohre az s-box estefade karde 
+        p[0] += S[ p[EKEY_WORDS-1]&511 ];
         p[0] = LROTATE(p[0],9);
     }
 
@@ -504,7 +513,7 @@ int mars_setup(int n, WORD *kp, WORD *ep)
     for (j=0; j<4; j++) {
         /* Linear transformation */
         for (i=0; i<15; i++) { 
-            WORD w = T[(i+8)%15] ^ T[(i+13)%15]; /* T[i-7] ^ T[i-2] *///zohre masalan inja hamin bitha ro negah darim ya na ? 
+            WORD w = T[(i+8)%15] ^ T[(i+13)%15]; /* T[i-7] ^ T[i-2] */
             T[i] ^= LROTATE(w,3) ^ (4*i+j);
         }
 
@@ -513,8 +522,7 @@ int mars_setup(int n, WORD *kp, WORD *ep)
             /* stir with full type-1 s-box rounds */
 	    i = 0;
             for ( ; i<15; i++) {
-               // T[i] += S[ T[(i+14)%15]&511 ];   /* T[i] += S[ T[i-1] ] *///zohre az s-box estefade karde
-				T[i] += S_box ( T[(i+14)%15]&511 );  
+				T[i] += S_box(T[(i+14)%15]);   /* T[i] += S[ T[i-1] ] */
                 T[i] = LROTATE(T[i],9);
             }
         }
@@ -536,18 +544,18 @@ int mars_setup(int n, WORD *kp, WORD *ep)
  * data[src] is used to modify data[dst1], data[dst2] and data[dst2]
  */
 void forward_mix_round(WORD data[], int src, int dst1, int dst2, int dst3)
-{   //zohre vaghti 64 bit mishe bayad i0-i3 ham 8 ta beshe ? 
+{
     int i0, i1, i2, i3;
 
-    i0 = data[src] & 255;          /* lowest byte */
-    i1 = (data[src] >> 8) & 255;   /* 2nd byte    */
-    i2 = (data[src] >> 16) & 255;  /* 3rd byte    */
-    i3 = (data[src] >> 24) & 255;  /* highest byte*/
+    i0 = data[src] & ((int)pow(2.0,8*EXP)-1);          /* lowest byte */
+    i1 = (data[src] >> 8*EXP) & ((int)pow(2.0,8*EXP)-1);   /* 2nd byte    */
+    i2 = (data[src] >> 16*EXP) & ((int)pow(2.0,8*EXP)-1);  /* 3rd byte    */
+    i3 = (data[src] >> 24*EXP) & ((int)pow(2.0,8*EXP)-1);  /* highest byte*/
 
-    data[dst1] ^= S_box(i0);//zohre az s-box estefade karde 
-    data[dst1] += S_box(i1+256);//zohre az s-box estefade karde
-    data[dst2] += S_box(i2); //zohre az s-box estefade karde
-    data[dst3] ^= S_box(i3+256); //zohre az s-box estefade karde
+    data[dst1] ^= S_box (i0);
+    data[dst1] += S_box (i1);
+    data[dst2] += S_box (i2); 
+    data[dst3] ^= S_box (i3); 
 
     data[src] = RROTATE(data[src],24);
 }
@@ -556,18 +564,18 @@ void forward_mix_round(WORD data[], int src, int dst1, int dst2, int dst3)
  * data[src] is used to modify data[dst1], data[dst2] and data[dst2]
  */
 void backwards_mix_round(WORD data[], int src, int dst1, int dst2, int dst3)
-{ //zohre vaghti 64 bit mishe bayad i0-i3 ham 8 ta beshe ? 
+{
     int i0, i1, i2, i3;
 
-    i0 = data[src] & 255;          /* lowest byte */
-    i1 = (data[src] >> 8) & 255;   /* 2nd byte    */
-    i2 = (data[src] >> 16) & 255;  /* 3rd byte    */
-    i3 = (data[src] >> 24) & 255;  /* highest byte*/
+    i0 = data[src] & ((int)pow(2.0,8*EXP)-1);          /* lowest byte */
+    i1 = (data[src] >> 8*EXP) & ((int)pow(2.0,8*EXP)-1);   /* 2nd byte    */
+    i2 = (data[src] >> 16*EXP) & ((int)pow(2.0,8*EXP)-1);  /* 3rd byte    */
+    i3 = (data[src] >> 24*EXP) & ((int)pow(2.0,8*EXP)-1);  /* highest byte*/
 
-    data[dst1] ^= S_box(i0+256);//zohre az s-box estefade karde
-    data[dst2] -= S_box(i3);//zohre az s-box estefade karde
-    data[dst3] -= S_box(i2+256); //zohre az s-box estefade karde
-    data[dst3] ^= S_box(i1); //zohre az s-box estefade karde
+    data[dst1] ^= S_box (i0);
+    data[dst2] -= S_box (i3);
+    data[dst3] -= S_box (i2); 
+    data[dst3] ^= S_box (i1); 
 
     data[src] = LROTATE(data[src],24);
 }
@@ -575,15 +583,14 @@ void backwards_mix_round(WORD data[], int src, int dst1, int dst2, int dst3)
 /* Description of the E-function: data word `in' and key words 
  * `key1', `key2' are used to produce three outputs `L', `M' and `R'
  */
-//zohre az s-box estefade karde 
 #define E_FNC(in, L, M, R, key1, key2)\
     M = in + key1;            \
-    R = LROTATE(in,13) * key2;\
+    R = LROTATE(in,13*MULT) * key2;\
     L = S_box(M & 511);           \
-    R = LROTATE(R,5);         \
+    R = LROTATE(R,5*MULT);         \
     L ^= R;                   \
     M = LROTATE(M,R);         \
-    R = LROTATE(R,5);         \
+    R = LROTATE(R,5*MULT);         \
     L ^= R;                   \
     L = LROTATE(L,R);
 
@@ -626,7 +633,7 @@ void mars_encrypt(WORD *in, WORD *out, WORD *key)
 	/* compute the E-function */
 	E_FNC(out[src], L, M, R, key[2*i+4], key[2*i+5]);  
 	out[dst2] += M;
-	out[src] = LROTATE(out[src],13);
+	out[src] = LROTATE(out[src],13*MULT);
 
 	if (i < 8) {   /* first eight rounds in forward mode */
 	    out[dst1] += L;
@@ -666,6 +673,9 @@ void mars_encrypt(WORD *in, WORD *out, WORD *key)
 void mars_decrypt(WORD *in, WORD *out, WORD *key)
 {
     int i;
+	WORD tmpO[4]={0};
+	for (int i=0; i<4;i++)
+		tmpO[i]=plaintext[i];
     IVT_DEBUG(in[0],in[1],in[2],in[3]);
 
     /* first, add subkeys to all input data words */
@@ -697,7 +707,7 @@ void mars_decrypt(WORD *in, WORD *out, WORD *key)
 	int dst2 = (i+2) % 4; 
 	int dst3 = (i+1) % 4;
 
-	out[src] = RROTATE(out[src],13);
+	out[src] = RROTATE(out[src],13*MULT);
 	E_FNC(out[src], L, M, R, key[2*i+4],key[2*i+5]); 
 	out[dst2] -= M;
 
@@ -732,6 +742,8 @@ void mars_decrypt(WORD *in, WORD *out, WORD *key)
     out[1] -= key[1];
     out[0] -= key[0];
     IVT_DEBUG(out[0],out[1],out[2],out[3]);
+	for (int i=0; i<4;i++)
+		plaintext[i]=tmpO[i];
 }
 
 
@@ -742,7 +754,6 @@ void mars_decrypt(WORD *in, WORD *out, WORD *key)
  ************************************************************************/
 
 /* table for rapid, case insensitive hex conversion */
-//zohre ina ro va3 chi tarif karde ? 
 BYTE hex[256] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
@@ -842,8 +853,6 @@ int blockEncrypt(cipherInstance *cipher, keyInstance *key, BYTE *input,
 #           endif
         }
     }
-	//zohre in mode haye mokhtalef chie ? :\ 
-	//zohre too hameye mode ha ba tavajoh b inke word 32 bite ye seri mohasebat anjam dade hala ina ro bayad taghir bedim ? 
     else if(cipher->mode == MODE_CBC) {
         for(i=0;i<inputLen/8;i+=16){
 #           ifdef SWAP_BYTES
@@ -969,7 +978,7 @@ int blockDecrypt(cipherInstance *cipher, keyInstance *key, BYTE *input,
         cipher->CIV[1] = (cipher->CIV[1]<<1)|(cipher->CIV[2] & 0x80000000);
         cipher->CIV[2] = (cipher->CIV[2]<<1)|(cipher->CIV[3] & 0x80000000);
         cipher->CIV[3] = (cipher->CIV[3]<<1)|(WORD)(input[0]&1);
-
+		
     }
     else        
         return(BAD_CIPHER_MODE);
@@ -979,8 +988,8 @@ int blockDecrypt(cipherInstance *cipher, keyInstance *key, BYTE *input,
 
 // with this assumption that WORD become 64 bit
 WORD feistelTypeSbox(WORD input, int round){
-	WORD R=(input&((1 <<(W/2))-1));
-	WORD L=(input&(((1 <<(W/2))-1)<<(W/2)))>>(W/2);
+	WORD R=(input&((1 <<(W/8))-1));
+	WORD L =(input >> (W/8)) & ((1 <<(W/8))-1);
 	int i;
 	for(i=0;i<round;i++)
 	{
@@ -1012,66 +1021,80 @@ WORD MDC4TypeSbox(WORD input , static WORD *s_box){
 
 
 WORD S_box (WORD input) {
-	return S[input] ; 
+	WORD *s=NULL;
+	if(input&(1<<8)==0)
+		s = S_0;
+	else
+		s = S_1;
+	return MDC4TypeSbox(input,s);
+	//return s[input];
 }
-
+void random_input_gen(){
+	plaintext[0]=(((double)rand())/((double)32767)) * LLONG_MAX;
+	plaintext[1]=(((double)rand())/((double)32767)) * LLONG_MAX;
+	plaintext[2]=(((double)rand())/((double)32767)) * LLONG_MAX;
+	plaintext[3]=(((double)rand())/((double)32767)) * LLONG_MAX;
+}
 void avalanche_test() {
+	FILE *file=fopen("avalanche.txt","w");
+	int Array[10000]={0};
+	if(file==NULL){
+		printf("can not create file \n");
+		return;
+	}
 	int m,index,i,j;
 	WORD origin[4]={0};
 	WORD cipherOrigin[4]={0};
-	for(m=0;m<100;m++){
+	for(m=0;m<10000;m++){
 		random_input_gen();
 		
 		for (j=0 ;j<4; j++){
 			origin[j]=plaintext[j];
 		}
 		mars_encrypt(origin,cipherOrigin,eee);
-		for (index=0; index<128; index++) { 
-			plaintext[index/32]^=(1 <<(index % 32));
+		for (index=0; index<256; index++) { 
+			plaintext[index/64]^=(1 <<(index % 64));
 
 			mars_encrypt(plaintext,ciphertext,eee);
 			for(j =0;j<4;j++)
 				ciphertext[j]^=cipherOrigin[j];
-			for (i=0;i<128;i++){
-				if(ciphertext[i/32] & (1 << (i % 32)) != 0)
+			for (i=0;i<256;i++){
+				if(ciphertext[i/64] & (1 << (i % 64)) != 0)
 					avalanche_matrix[index][i]++;
 			}
-			plaintext[index/32]^=(1 <<(index % 32));
+			plaintext[index/64]^=(1 <<(index % 64));
 		}
 	}
 
-	for(i=0;i<128;i++){
-		for(j=0;j<128;j++)
-			printf("%d ",avalanche_matrix[i][j]);
-		printf("\n");
+	for(i=0;i<256;i++){
+		for(j=0;j<256;j++){
+			fprintf(file,"%d ",avalanche_matrix[i][j]);
+			Array[avalanche_matrix[i][j]]++;
+		}
+		fprintf(file,"\n");
 	}
+	fprintf(file,"\n");
+	fprintf(file,"\n");
+	for(int i=0;i<10000;i++)
+		fprintf(file,"%d,",Array[i]);
+	fclose(file);
 }
 
+int main(void){
+	
+(void)mars_setup(4,key,eee);
+	
 
-//int main(){
-//	WORD in=((1ULL <<(13)) );
-//	WORD key[4]={1,2,3,4};
-//	WORD eee[4]={0};
-//	(void)mars_setup(4,key,eee);
-//	
-//	
-//	//feistelTypeSbox(in,1);
-//	//MDC4TypeSbox(in,S_1);
-//	plaintext[0]=1;
-//	plaintext[1]=2;
-//	plaintext[2]=3;
-//	plaintext[3]=4;
-//	mars_encrypt(plaintext,ciphertext,eee);
-//	mars_decrypt(ciphertext,plaintext,eee);
-//	/*makeKey(&keyin,DIR_ENCRYPT,128,"000102030405060708090a0b0c0d0e0f");
-//    cipherInit(&encipher,MODE_CBC,"00000000000000000000000000000000");
-//    cipherInit(&decipher,MODE_CBC,"00000000000000000000000000000000");
-//    blockEncrypt(&encipher, &keyin, 
-//                 (BYTE *)"This is a two block test of CBC",256, ctbuf);
-//    blockDecrypt(&decipher, &keyin, ctbuf, 256, outbuf);
-//    printf("\nHigh level output test: \n %s\n", (char *)outbuf); 
-//	*/
-//	
-//	//avalanche_test();
-//	return 0 ; 
-//}
+	
+	//feistelTypeSbox(in,1);
+	//MDC4TypeSbox(in,S_1);
+	plaintext[0]=0;
+	plaintext[1]=0;
+	plaintext[2]=0;
+	plaintext[3]=1;
+	mars_decrypt(plaintext,ciphertext,eee);
+	//mars_decrypt(ciphertext,plaintext,eee);
+	avalanche_test();
+	//printf("%d",sizeof(WORD));
+	return 0;
+}

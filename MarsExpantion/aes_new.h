@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+
 /*************************************************************************
  * 
  *    NIST High Level C API, with some IBM additions
@@ -35,28 +36,19 @@
 #define BAD_KEY_INSTANCE -3  /*  Key passed is not valid                    */
 #define BAD_CIPHER_MODE  -4  /*  Params struct passed to cipherInit invalid */
 #define BAD_CIPHER_STATE -5  /*  Cipher in wrong state                      */
-#define NUMBER_OF_INPUTS 100 //number of inputs 
+
 typedef unsigned char BYTE;
-int avalanche_matrix [256][256]={0};
 
-//keyInstance keyin;
-//cipherInstance encipher,decipher;
-//BYTE ctbuf[32], outbuf[32]; 
 /* IBM Addition - a WORD must be 32 bits for this implementation */
-typedef uint64_t WORD;
-//typedef unsigned long WORD; 
-WORD plaintext[4] ; 
-WORD ciphertext[4] ; 
-WORD key[4]={1,2,3,4};
-WORD eee[40];
-
+//typedef unsigned long WORD;
+typedef unsigned long long int WORD;
 /* IBM specific defines: these parameters can be changed               */
 #define NUM_MIX 8           /* number of mixing rounds per stage       */
 #define NUM_ROUNDS 16       /* number of full core rounds              */
 #define NUM_SETUP 7         /* number of key setup mixing rounds       */
 
 /* IBM specific defines: these parameters are fixed for this implementation */
-#define W          64      /* number of bits in a word                     *///zohre 
+#define W          64       /* number of bits in a word                     */
 #define NUM_DATA    4       /* data block size in words                     */
 #define EKEY_WORDS (2*(NUM_DATA+NUM_ROUNDS))    /* number of subkey words   */
 
@@ -110,12 +102,14 @@ void mars_encrypt(WORD *in, WORD *out, WORD *ep);
 /* mars decryption is simply encryption in reverse */
 void mars_decrypt(WORD *in, WORD *out, WORD *ep);                       
 
-void random_input_gen(){
-	plaintext[0]=(((double)rand())/((double)32767)) * 4294967295;
-	plaintext[1]=(((double)rand())/((double)32767)) * 4294967295;
-	plaintext[2]=(((double)rand())/((double)32767)) * 4294967295;
-	plaintext[3]=(((double)rand())/((double)32767)) * 4294967295;
-}
+
+//extern WORD key[4]={1,2,3,4};
+//extern WORD eee[4]={0};
+//extern WORD plaintext[4]={0};
+//extern WORD ciphertext[4]={0};
+
+
 
 void avalanche_test();
 WORD S_box (WORD input); 
+int avalanche_matrix [256][256]={0};
